@@ -8,35 +8,60 @@ public class MyBot : IChessBot
 
     //Endgames and openings need work as they lead to repetition
 
-    //issue found with transposition table: move which is previously safe and now dangerous is considered safe by computer
-    //thus allowing opponent to walk up and checkmate with no objections
-    //only new moves are actually calculated
-    //need a check on pieces newly in danger: bot will move a 0 score move even if a different piece is in danger
-    //can be solved by storing positions not moves?
-
     //endgame: incentivise moving opp. king to the edge plus moving our king closer to opp king
 
+    //to do:
+    //change tp table from dict to array
+    //implement piece tables + endgame weighting
+    //basic move ordering
+    //iterative deepening + more move ordering
+
+    const sbyte INVALID = 0, LBOUND = -1, UBOUND = 1, EXACT = 2;
+    public struct Transposition
+    {
+        public Transposition(ulong zobristHash, int evaluation, byte d)
+        {
+            hash = zobristHash;
+            score = evaluation;
+            depth = (sbyte)d;
+        }
+        public ulong hash = 0;
+        public int score = 0;
+        public sbyte depth = 0;
+        public sbyte flag = INVALID;
+        public Move move = new Move();
+    }
+    ulong tpMask = 0x7FFFFF;
+    Transposition[] transpositionTable = new Transposition[(ulong)0x7FFFFF + 1];
 
     PieceType[] types = new PieceType[] { PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen, PieceType.King };
-    short[] values = new short[] { 10, 30, 30, 50, 90, 1000 };
+    short[] values = new short[] { 10, 30, 30, 50, 90, 200 };
 
-    Dictionary<ulong, int> transpositionTable = new Dictionary<ulong, int>();
-    Move currentBestMove;
     int calculations = 0;
 
     public Move Think(Board board, Timer timer)
     {
         calculations = 0;
         Search(board, 4, -10000, 10000);
-        Console.WriteLine("dictionary = " + transpositionTable.Count);
-        Console.WriteLine("calc = " + calculations);
-        return currentBestMove;
+        //Console.WriteLine("calc = " + calculations);
+        return transpositionTable[board.ZobristKey & tpMask].move;
     }
     public int Search(Board b, int depth, int best, int upperBound) //lower bound is current best move, upper bound is best move of opponent
     {
-        if (transpositionTable.ContainsKey(b.ZobristKey))
+        ref Transposition transposition = ref transpositionTable[b.ZobristKey & tpMask];
+        if (transposition.flag != INVALID)
         {
-            return transpositionTable[b.ZobristKey];
+            if (transposition.flag == EXACT) { return transposition.score; }
+            else if (transposition.flag == LBOUND && transposition.score > best)
+            {
+                best = transposition.score;
+            }
+            else if (transposition.flag == UBOUND && transposition.score < upperBound)
+            {
+                upperBound = transposition.score;
+            }
+
+            if (best >= upperBound) { return transposition.score; }
         }
         if (b.IsInCheckmate())
         {
@@ -49,24 +74,26 @@ public class MyBot : IChessBot
         }
         else
         {
-            int bestScore = best;
+            int bestScore = -10000;
             Move[] moves = b.GetLegalMoves();
             
             if (moves.Length == 0)
             {
                 return 0;
             }
-            Move bestMove = moves[0];
+            Move bestMove = new Move();
 
+            sbyte currentFlag = EXACT;
             foreach (Move move in moves)
             {
                 calculations++;
                 b.MakeMove(move);
                 int score = -Search(b, depth - 1, -upperBound, -bestScore);
+                b.UndoMove(move);
                 if (score >= upperBound)
                 {
                     bestScore = upperBound;
-                    b.UndoMove(move);
+                    currentFlag = LBOUND;
                     break;
                 }
                 if (score > bestScore)
@@ -74,17 +101,20 @@ public class MyBot : IChessBot
                     bestScore = score;
                     bestMove = move;
                 }
-                if (depth == 4)
-                {
-                    transpositionTable[b.ZobristKey] = bestScore;
-                }
-                b.UndoMove(move);
             }
-            currentBestMove = bestMove;
+            if (depth % 2 == 0) //if depth is even number aka from bot's pov    later add storing positions for opponent too?
+            {
+                if (bestScore < best) { currentFlag = UBOUND; }
+                transposition.score = bestScore;
+                transposition.move = bestMove;
+                transposition.hash = b.ZobristKey;
+                transposition.flag = currentFlag;
+            }
             return bestScore;
         }
 
     }
+
     public int EvaluateScore(Board board)
     {
         int score = 0;
