@@ -36,7 +36,6 @@ public class MyBot : IChessBot
     ulong tpMask = 0x7FFFFF;
     Transposition[] transpositionTable = new Transposition[(ulong)0x7FFFFF + 1];
 
-    PieceType[] types = { PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen, PieceType.King };
     byte[] values = { 10, 30, 30, 50, 90, 200 };
 
     int calculations = 0;
@@ -100,32 +99,32 @@ public class MyBot : IChessBot
     
     public Move Think(Board board, Timer timer)
     {
-        //byte[] decom = pieceTableBishop.SelectMany(BitConverter.GetBytes).ToArray();
-        //sbyte[] result = (sbyte[])(Array)decom;
-        //Array.ForEach(result, x => Console.Write("" + x + ","));
-
         calculations = 0;
+        //Console.WriteLine(EvaluateScore(board));
         Search(board, 4, -10000, 10000);
         //Console.WriteLine("calc = " + calculations);
-        Console.WriteLine(transpositionTable[board.ZobristKey & tpMask].score);
+        //Console.WriteLine("tp table = " + transpositionTable[board.ZobristKey & tpMask].score);
+        //Console.WriteLine(EvaluateScore(board));
+        //Console.WriteLine("");
         return transpositionTable[board.ZobristKey & tpMask].move;
     }
-    public int Search(Board b, int depth, int best, int upperBound) //lower bound is current best move, upper bound is best move of opponent
+
+    int Search(Board b, int depth, int lowerBound, int upperBound) //lower bound is current best move, upper bound is best move of opponent
     {
         ref Transposition transposition = ref transpositionTable[b.ZobristKey & tpMask];
         if (transposition.flag != INVALID)
         {
             if (transposition.flag == EXACT) { return transposition.score; }
-            else if (transposition.flag == LBOUND && transposition.score > best)
+            if (transposition.flag == LBOUND && transposition.score > lowerBound)
             {
-                best = transposition.score;
+                lowerBound = transposition.score;
             }
             else if (transposition.flag == UBOUND && transposition.score < upperBound)
             {
                 upperBound = transposition.score;
             }
 
-            if (best >= upperBound) { return transposition.score; }
+            if (lowerBound >= upperBound) { return transposition.score; }
         }
         if (b.IsInCheckmate())
         {
@@ -150,7 +149,7 @@ public class MyBot : IChessBot
             sbyte currentFlag = EXACT;
             foreach (Move move in moves)
             {
-                calculations++;
+                //calculations++;
                 b.MakeMove(move);
                 int score = -Search(b, depth - 1, -upperBound, -bestScore);
                 b.UndoMove(move);
@@ -166,10 +165,11 @@ public class MyBot : IChessBot
                     bestScore = score;
                     bestMove = move;
                 }
+
             }
             if (depth % 2 == 0) //if depth is even number aka from bot's pov    later add storing positions for opponent too?
             {
-                if (bestScore < best) { currentFlag = UBOUND; }
+                if (bestScore < lowerBound) { currentFlag = UBOUND; }
                 transposition.score = bestScore;
                 transposition.move = bestMove;
                 transposition.hash = b.ZobristKey;
@@ -180,12 +180,30 @@ public class MyBot : IChessBot
 
     }
 
-    public int EvaluateScore(Board board)
+    int Quiesce(Board b, int lowerBound, int upperBound)
+    {
+        int stand_pat = EvaluateScore(b);
+        if (stand_pat >= upperBound) { return upperBound; }
+        if (stand_pat > lowerBound) { lowerBound = stand_pat; }
+
+        foreach (Move move in b.GetLegalMoves(true))
+        {
+            b.MakeMove(move);
+            int score = -Quiesce(b, -upperBound, -lowerBound);
+            b.UndoMove(move);
+
+            if (score >= upperBound) { return upperBound; }
+            if (score > lowerBound) { lowerBound = score; }
+        }
+        return lowerBound;
+    }
+
+    int EvaluateScore(Board board)
     {
         int score = 0;
 
         PieceList[] pieceLists = board.GetAllPieceLists();
-        float multiplier = board.IsWhiteToMove ? 0.1f : -0.1f;
+        int multiplier = board.IsWhiteToMove ? 1 : -1;
         for (int i = 0; i < pieceLists.Length; i++)
         {
             if (i == 6) //when colour switches
@@ -194,17 +212,19 @@ public class MyBot : IChessBot
             }
             byte[] decompressed = pieceTables[i%6].SelectMany(BitConverter.GetBytes).ToArray();
             sbyte[] currentPieceTable = (sbyte[])(Array)decompressed;
+
             foreach (Piece piece in pieceLists[i])
             {
-                score += (int)(multiplier * currentPieceTable[GetPieceTableIndex(piece, board.IsWhiteToMove)]) + values[i%6];
+                float increment = currentPieceTable[GetPieceTableIndex(piece, i<6)] * 0.1f + values[i % 6];
+                score += (int)(multiplier * increment);
             }
         }
         return score;
     }
 
-    public int GetPieceTableIndex(Piece p, bool isWhite)
+    int GetPieceTableIndex(Piece p, bool isWhite)
     {
-        int index = isWhite ? (p.Square.Rank * 8) + 7 - p.Square.File : ((7 - p.Square.Rank) * 8) + p.Square.File;
+        int index = !isWhite ? (p.Square.Rank * 8) + 7 - p.Square.File : ((7 - p.Square.Rank) * 8) + p.Square.File;
         return index;
     }
 
