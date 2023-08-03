@@ -101,20 +101,38 @@ public class MyBot : IChessBot
     {
         calculations = 0;
         //Console.WriteLine(EvaluateScore(board));
-        Search(board, 4, -10000, 10000);
+        //Search(board, 4, -10000, 10000);
+        StartSearch(board);
 
-        //Console.WriteLine("calc = " + calculations);
+        Console.WriteLine("calc = " + calculations);
         //Console.WriteLine("tp table = " + transpositionTable[board.ZobristKey & tpMask].score);
         //Console.WriteLine(EvaluateScore(board));
 
         //Console.WriteLine("");
+        //Console.WriteLine("return " + transpositionTable[board.ZobristKey & tpMask].move);
+        //Console.WriteLine(timer.MillisecondsElapsedThisTurn);
         return transpositionTable[board.ZobristKey & tpMask].move;
+    }
+
+    void StartSearch(Board board)
+    {
+        for (int i = 2; i <= 4; i+=2)
+        {
+            int score = Search(board, i, -10000, 10000);
+            //if time runs out break
+        }
     }
 
     int Search(Board b, int depth, int lowerBound, int upperBound) //lower bound is current best move, upper bound is best move of opponent
     {
         ref Transposition transposition = ref transpositionTable[b.ZobristKey & tpMask];
-        if (transposition.flag != INVALID)
+        
+        /**if (depth == 4)
+        {
+            Console.WriteLine("search depth " + depth + " with stored " + transposition.move + " of score " + transposition.score);
+        }*/
+
+        if (transposition.flag != INVALID && transposition.depth >= depth)
         {
             if (transposition.flag == EXACT) { return transposition.score; }
             if (transposition.flag == LBOUND && transposition.score > lowerBound)
@@ -135,13 +153,15 @@ public class MyBot : IChessBot
 
         if (depth == 0)
         {
-            return EvaluateScore(b);
+            return Quiesce(b, lowerBound, upperBound);
         }
         else
         {
             int bestScore = -10000;
             //Move[] moves = b.GetLegalMoves();
-            Move[] moves = OrderMoves(b.GetLegalMoves());
+            Move[] moves = OrderMoves(b.GetLegalMoves(), transposition);
+            
+
             
             if (moves.Length == 0)
             {
@@ -152,7 +172,7 @@ public class MyBot : IChessBot
             sbyte currentFlag = EXACT;
             foreach (Move move in moves)
             {
-                //calculations++;
+                calculations++;
                 b.MakeMove(move);
                 int score = -Search(b, depth - 1, -upperBound, -bestScore);
                 b.UndoMove(move);
@@ -177,20 +197,26 @@ public class MyBot : IChessBot
                 transposition.move = bestMove;
                 transposition.hash = b.ZobristKey;
                 transposition.flag = currentFlag;
+                transposition.depth = (sbyte)depth;
             }
             return bestScore;
         }
 
     }
 
-    Move[] OrderMoves(Move[] legalMoves)
+    Move[] OrderMoves(Move[] legalMoves, Transposition currentTransposition)
     {
         int[] moveScores = new int[legalMoves.Length];
 
         for (int i = 0; i < legalMoves.Length; i++)
         {
-            ref Move move = ref legalMoves[i];
-            if (move.IsCapture) //maths is inverted because default sort is ascending
+            Move move = legalMoves[i];
+            if (currentTransposition.move == move) //if currently stored best move, test that first
+            {
+                moveScores[i] = -1000;
+                //Console.WriteLine("found best move " + move);
+            }
+            else if (move.IsCapture) //maths is inverted because default sort is ascending
             {
                 moveScores[i] = values[(int)move.MovePieceType - 1] - 5 * values[(int)move.CapturePieceType - 1];
             }
