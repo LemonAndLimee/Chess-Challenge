@@ -102,9 +102,11 @@ public class MyBot : IChessBot
         calculations = 0;
         //Console.WriteLine(EvaluateScore(board));
         Search(board, 4, -10000, 10000);
+
         //Console.WriteLine("calc = " + calculations);
         //Console.WriteLine("tp table = " + transpositionTable[board.ZobristKey & tpMask].score);
         //Console.WriteLine(EvaluateScore(board));
+
         //Console.WriteLine("");
         return transpositionTable[board.ZobristKey & tpMask].move;
     }
@@ -138,13 +140,14 @@ public class MyBot : IChessBot
         else
         {
             int bestScore = -10000;
-            Move[] moves = b.GetLegalMoves();
+            //Move[] moves = b.GetLegalMoves();
+            Move[] moves = OrderMoves(b.GetLegalMoves());
             
             if (moves.Length == 0)
             {
                 return 0;
             }
-            Move bestMove = new Move();
+            Move bestMove = moves[0];
 
             sbyte currentFlag = EXACT;
             foreach (Move move in moves)
@@ -178,6 +181,24 @@ public class MyBot : IChessBot
             return bestScore;
         }
 
+    }
+
+    Move[] OrderMoves(Move[] legalMoves)
+    {
+        int[] moveScores = new int[legalMoves.Length];
+
+        for (int i = 0; i < legalMoves.Length; i++)
+        {
+            ref Move move = ref legalMoves[i];
+            if (move.IsCapture) //maths is inverted because default sort is ascending
+            {
+                moveScores[i] = values[(int)move.MovePieceType - 1] - 5 * values[(int)move.CapturePieceType - 1];
+            }
+            else { moveScores[i] = 200; }
+        }
+
+        Array.Sort(moveScores, legalMoves);
+        return legalMoves;
     }
 
     int Quiesce(Board b, int lowerBound, int upperBound)
