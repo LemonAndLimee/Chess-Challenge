@@ -40,8 +40,8 @@ public class MyBot : IChessBot
 
     int calculations = 0;
 
-    ulong[][] pieceTables = {
-        new ulong[]{
+    ulong[] pieceTables = new ulong[]{
+        
         0,
         3617008641903833650,
         723412809732590090,
@@ -49,9 +49,8 @@ public class MyBot : IChessBot
         86234890240,
         431208669220633349,
         363114732645386757,
-        0
-        },
-        new ulong[] {
+        0,
+        
         14904912430879660238,
         15630868406696209624,
         16285027312364814562,
@@ -59,33 +58,35 @@ public class MyBot : IChessBot
         16285032831482003682,
         16286434687248369122,
         15630868428254932184,
-        14904912430879660238
-    },
-        new ulong[] {17075106577787582188,
+        14904912430879660238,
+
+        17075106577787582188,
 17726168133330272502,
 17726173674006184182,
 17727581048889738742,
 17726179171564650742,
 17728993921331759862,
 17727575508213827062,
-17075106577787582188},
-        new ulong[]{0,
+17075106577787582188,
+
+        0,
 363113758191127045,
 18086456103519912187,
 18086456103519912187,
 18086456103519912187,
 18086456103519912187,
 18086456103519912187,
-21558722560},
-        new ulong[] {17075106599346304748,
+21558722560,
+
+        17075106599346304748,
 17726168133330272502,
 17726173652447461622,
 18086461622637101307,
 18086461622637101056,
 17726173652447462902,
 17726168133330600182,
-17075106599346304748},
-        new ulong[] {
+17075106599346304748,
+        
         16346053230286395618,
 16346053230286395618,
 16346053230286395618,
@@ -94,9 +95,8 @@ public class MyBot : IChessBot
 17792856730165374198,
 1446781380292776980,
 1449607125176819220
-    }
     };
-    
+
     public Move Think(Board board, Timer timer)
     {
         calculations = 0;
@@ -251,18 +251,21 @@ public class MyBot : IChessBot
 
         PieceList[] pieceLists = board.GetAllPieceLists();
         int multiplier = board.IsWhiteToMove ? 1 : -1;
+
+        byte[] decompressed = pieceTables.SelectMany(BitConverter.GetBytes).ToArray();
+        sbyte[] pieceTable = (sbyte[])(Array)decompressed;
+
         for (int i = 0; i < pieceLists.Length; i++)
         {
             if (i == 6) //when colour switches
             {
                 multiplier = multiplier * -1;
             }
-            byte[] decompressed = pieceTables[i%6].SelectMany(BitConverter.GetBytes).ToArray();
-            sbyte[] currentPieceTable = (sbyte[])(Array)decompressed;
+            
 
             foreach (Piece piece in pieceLists[i])
             {
-                float increment = currentPieceTable[GetPieceTableIndex(piece, i<6)] * 0.1f + values[i % 6];
+                float increment = pieceTable[(i%6 * 8) + GetPieceTableIndex(piece, i<6)] * 0.1f + values[i % 6];
                 score += (int)(multiplier * increment);
             }
         }
