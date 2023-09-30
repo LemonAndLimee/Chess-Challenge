@@ -91,33 +91,14 @@ public class MyBot : IChessBot
     float maxSearchTime = 0;
     Timer globalTimer;
 
-    bool printFlag = true;
-
     List<string> lines = new List<string>();
+
+    bool printFlag = false;
 
     public Move Think(Board board, Timer timer)
     {
         lines.Clear();
         lines.Add("\n ---------------\n current board eval= " + EvaluateScore(board) + "\n");
-
-        /**byte[] decompressed = pieceTables.SelectMany(BitConverter.GetBytes).ToArray();
-        sbyte[] pieceTable = (sbyte[])(Array)decompressed;
-
-        Console.WriteLine("king:");
-        for (int x = 0; x < 8; x++)
-        {
-            string outp = "";
-            for (int y = 0; y < 8; y++)
-            {
-                outp = outp + pieceTable[(x * 8) + y + 320] + ", ";
-            }
-            Console.WriteLine(outp);
-        }
-        Piece king = board.GetPieceList(PieceType.King, false)[0];
-
-        Console.WriteLine("\nNow on " + king.Square.Name);
-        Console.WriteLine(GetPieceTableIndex(king, 5));
-        Console.WriteLine(pieceTable[GetPieceTableIndex(king, 5)]);*/
 
         maxSearchTime = timer.MillisecondsRemaining / 30;
         globalTimer = timer;
@@ -125,7 +106,6 @@ public class MyBot : IChessBot
         for (int depth = 2, alpha = -99999, beta = 99999; ;)
         {
             lines.Add(depth.ToString());
-            //Console.WriteLine(depth + " search with alpha beta = " + alpha + ", " + beta);
 
             int score = Search(board, depth, 0, alpha, beta);
 
@@ -133,15 +113,18 @@ public class MyBot : IChessBot
             {
 #if DEBUG
                 board.MakeMove(rootMove);
-                lines.Add(String.Format("\n RETURN {0}, eval score after move= {1}", rootMove, EvaluateScore(board)));
+                lines.Add(String.Format("\n RETURN {0}, eval score after move= {1}, calc score= {2}", rootMove, EvaluateScore(board), score));
                 board.UndoMove(rootMove);
 
-                string docpath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                using (StreamWriter outputFile = new StreamWriter(Path.Combine(docpath, "ChessProgramOutput.txt"), true))
+                if (printFlag)
                 {
-                    foreach (string line in lines)
+                    string docpath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    using (StreamWriter outputFile = new StreamWriter(Path.Combine(docpath, "ChessProgramOutput.txt"), true))
                     {
-                        outputFile.WriteLine(line);
+                        foreach (string line in lines)
+                        {
+                            outputFile.WriteLine(line);
+                        }
                     }
                 }
 #endif
@@ -152,8 +135,6 @@ public class MyBot : IChessBot
             lines.Add(String.Format("Info: Depth={0} || Score={1} || Rootmove={2}{3} || alphabeta={4} {5}", depth, score, rootMove.StartSquare.Name, rootMove.TargetSquare.Name, alpha, beta));
             lines.Add(String.Format("Move List: {0}", GetMoveList(board, depth)));
             lines.Add("");
-            //Console.WriteLine("Info: Depth={0} || Score={1} || Rootmove={2}{3} || alphabeta={4} {5}", depth, score, rootMove.StartSquare.Name, rootMove.TargetSquare.Name, alpha, beta);
-            //Console.WriteLine("Move List: {0}", GetMoveList(board, depth));
 #endif
 
             if (score <= alpha) alpha -= 100;
@@ -210,7 +191,6 @@ public class MyBot : IChessBot
                 if (isRoot)
                 {
                     lines.Add("transposition inherit root " + transposition.move + " depth = " + transposition.depth + " score = " + transposition.score + " flag = " + transposition.flag);
-                    //Console.WriteLine("transposition inherit root " + transposition.move + " depth = " + transposition.depth + " score = " + transposition.score + " flag = " + transposition.flag);
                     rootMove = transposition.move;
                 }
                 return transposition.score;
@@ -231,7 +211,7 @@ public class MyBot : IChessBot
         // If the end of the search is reached, perform a Quiescence Search
         if (depth == 0)
         {
-            return -Quiesce(b, -beta, -alpha); //UNSURE WHAT SYMBOLS TO USE HERE (PROBLEM WITH KING WANDERING + QUEEN MAKING SACRIFICS)
+            return Quiesce(b, -beta, -alpha, true);
         }
         else
         {
@@ -250,12 +230,6 @@ public class MyBot : IChessBot
                     lines.Add("TIME CUTOFF");
                     return 99999;
                 }
-
-                if (depth ==4 && isRoot)
-                {
-                    //printFlag = true;
-                }
-
                 b.MakeMove(move);
 
                 if (printFlag && depth > 1)
@@ -265,15 +239,11 @@ public class MyBot : IChessBot
                     {
                         output = output + "  ";
                     }
-                    lines.Add(String.Format(output + "GOING INTO {0} at depth, ply {1} {2}, ab= {3} {4} ....................................... FEN {5}", move, depth, ply - 1, beta, alpha, b.GetFenString()));
+                    lines.Add(String.Format(output + "GOING INTO {0} at depth, ply {1} {2}, current ab= {3} {4} ....................................... FEN {5}", move, depth, ply - 1, alpha, beta, b.GetFenString()));
                 }
 
                 int score = -Search(b, depth - 1, ply, -beta, -alpha);
 #if DEBUG       
-                if (move.StartSquare.Name == "f4" && move.TargetSquare.Name == "c7" && depth == 1 && ply == 4)
-                {
-                    //Console.WriteLine("CASE STUDY F4C7: {0}, evalatcall= {1}, quiesce= {2}, nextSearch= {3}", score, EvaluateScore(b), Quiesce(b, -beta, -alpha), -Search(b, depth-1, ply, -beta, -alpha));
-                }
                 if (printFlag)
                 {
                     string output = "";
@@ -287,20 +257,17 @@ public class MyBot : IChessBot
                     }
                     else if (depth == 1)
                     {
-                        lines.Add(String.Format(output + "{0} at depth, ply {1} {2}, with score {3} --- quiesce params= {6} {4} {5}", move, depth, ply - 1, score, alpha, beta, EvaluateScore(b)));
+                        lines.Add(String.Format(output + "{0} at depth, ply {1} {2}, with score {3} --- quiesce params= {6} {4} {5} --- current bestscore= {7}", move, depth, ply - 1, score, alpha, beta, EvaluateScore(b), bestScore));
+                        //Quiesce(b, alpha, beta, true);
                     }
-                    //Console.WriteLine(output + "{0} at depth, ply {1} {2}, with score {3}", move, depth, ply - 1, score);
-                    if (isRoot)
-                    {
-                        //printFlag = false;
-                    }
+
                 }
 #endif
                 //b.UndoMove(move);
 
 
                 // If the score exceeds beta, we know it is "too good" and therefore cut off the rest of the search
-                if (score > beta)
+                if (score >= beta)
                 {
                     bestScore = beta;
                     bestMove = move;
@@ -315,14 +282,6 @@ public class MyBot : IChessBot
                         lines.Add(String.Format("new best move found at depth {7} : {0}{1} with score= {2}, prev bestscore/move= {3}, {4}{5}, alphabeta= {6} {8}",
                                 move.StartSquare.Name, move.TargetSquare.Name, score, bestScore,
                                 bestMove.StartSquare.Name, bestMove.TargetSquare.Name, alpha, depth, beta));
-                        if (depth == 1)
-                        {
-                            Quiesce(b, alpha, beta, true);
-                        }
-                        //Console.WriteLine("new best move found at depth {7} : {0}{1} with score= {2}, prev bestscore/move= {3}, {4}{5}, alphabeta= {6} {8}",
-                                //move.StartSquare.Name, move.TargetSquare.Name, score, bestScore,
-                                //bestMove.StartSquare.Name, bestMove.TargetSquare.Name, alpha, depth, beta);
-
                     }
                     bestScore = score;
                     bestMove = move;
@@ -339,9 +298,24 @@ public class MyBot : IChessBot
                 b.UndoMove(move);
             }
 
+#if DEBUG
+            if (bestScore <= startingAlpha)
+            {
+                lines.Add("commit to transposition as UBOUND >>> " + bestMove + " at DEPTH " + depth);
+            }
+            else if (bestScore >= beta)
+            {
+                lines.Add("commit to transposition as LBOUND >>> " + bestMove + " at DEPTH " + depth);
+            }
+            else
+            {
+                lines.Add("commit to transposition as EXACT >>> " + bestMove + " at DEPTH " + depth);
+            }
+#endif
+
             // Add entry to transposition table
-            if (bestScore < startingAlpha) transposition.flag = UBOUND;
-            else if (bestScore > beta) transposition.flag = LBOUND;
+            if (bestScore <= startingAlpha) transposition.flag = UBOUND;
+            else if (bestScore >= beta) transposition.flag = LBOUND;
             else transposition.flag = EXACT;
             transposition.score = bestScore;
             transposition.move = bestMove;
@@ -375,10 +349,10 @@ public class MyBot : IChessBot
     }
 
     // Quiescence Search to avoid the Horizon Effect, where there is a blunder just past the search depth
-    int Quiesce(Board b, int alpha, int beta)
+    /**int Quiesce(Board b, int alpha, int beta)
     {
         int stand_pat = EvaluateScore(b);
-        if (stand_pat >= beta) return beta;
+        if (stand_pat >= beta) return stand_pat;
         if (stand_pat > alpha) alpha = stand_pat;
 
         foreach (Move move in b.GetLegalMoves(true))
@@ -387,18 +361,61 @@ public class MyBot : IChessBot
             int score = -Quiesce(b, -beta, -alpha);
             b.UndoMove(move);
 
-            if (score >= beta) return beta;
+            if (score >= beta) return score;
             if (score > alpha) alpha = score;
+        }
+        if (alpha <= -99999)
+        {
+            alpha = stand_pat;
+        }
+        return alpha;
+    }*/
+    int Quiesce(Board b, int alpha, int beta)
+    {
+        if (globalTimer.MillisecondsElapsedThisTurn >= maxSearchTime)
+        {
+            lines.Add("QUIESCE TIME CUTOFF");
+            return 99999;
+        }
+
+        int stand_pat = -EvaluateScore(b);
+        if (stand_pat >= beta) return stand_pat;
+        if (stand_pat > alpha) alpha = stand_pat;
+
+        foreach (Move move in b.GetLegalMoves(true))
+        {
+            b.MakeMove(move);
+            int score = -Quiesce(b, -beta, -alpha);
+            b.UndoMove(move);
+
+            if (score >= beta) return score;
+            if (score > alpha) alpha = score;
+        }
+        if (alpha <= -99999)
+        {
+            alpha = stand_pat;
         }
         return alpha;
     }
 #if DEBUG
     int Quiesce(Board b, int alpha, int beta, bool debug)
     {
-        lines.Add("**************** QUIESCE bscore, ab = " + EvaluateScore(b) + ",  " + alpha + ", " + beta);
-        int stand_pat = EvaluateScore(b);
-        if (stand_pat >= beta) return beta;
-        if (stand_pat > alpha) alpha = stand_pat;
+        lines.Add("**************** QUIESCE bscore, ab = " + EvaluateScore(b) + ",  " + alpha + ", " + beta + ", iswhite= " + b.IsWhiteToMove);
+
+        if (globalTimer.MillisecondsElapsedThisTurn >= maxSearchTime)
+        {
+            lines.Add("QUIESCE TIME CUTOFF");
+            return 99999;
+        }
+
+        int stand_pat = -EvaluateScore(b);
+
+        if (stand_pat >= beta)
+        {
+            lines.Add("              score >= beta, return score= " + stand_pat);
+            return stand_pat;
+        }
+        if (stand_pat > alpha && alpha != -10000) alpha = stand_pat;
 
         foreach (Move move in b.GetLegalMoves(true))
         {
@@ -410,14 +427,18 @@ public class MyBot : IChessBot
 
             if (score >= beta)
             {
-                lines.Add("              score >= beta, return beta= " + beta);
-                return beta;
+                lines.Add("              score >= beta, return score= " + score);
+                return score;
             }
             if (score > alpha)
             {
                 lines.Add("              score > alpha, alpha= score");
                 alpha = score;
             }
+        }
+        if (alpha <= -99999)
+        {
+            alpha = stand_pat;
         }
         lines.Add("**************** END QUIESCE, return alpha= " + alpha);
         return alpha;
@@ -433,7 +454,6 @@ public class MyBot : IChessBot
 
         byte[] decompressed = pieceTables.SelectMany(BitConverter.GetBytes).ToArray();
         sbyte[] pieceTable = (sbyte[])(Array)decompressed;
-
 
         for (int i = 0; i < pieceLists.Length; i++)
         {
